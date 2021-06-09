@@ -3,8 +3,7 @@
 module floatingpoint(x,y,clk,operation,mode,result32,result64,rst,overflow);
 input [63:0]x,y;
 reg [127:0] temp;
-real temp2;
-integer temp3;
+integer temp3,i;
 reg [63:0]count;
 input clk,rst,mode;
 output reg [31:0]result32;
@@ -20,12 +19,12 @@ always @(posedge clk)
 begin 
     if (rst)
     begin
-        nextoperation=idle;                             //default state
-        result32=0;
-        result64=0;
+        nextoperation<=idle;                             //default state
+        result32<=0;
+        result64<=0;
     end
     else
-        nextoperation=operation;                       //switching to new state
+        nextoperation<=operation;                       //switching to new state
 end
 always @(nextoperation,x,y)
 begin
@@ -104,10 +103,13 @@ begin
                             temp=temp^32'hffffffff;
                             temp=temp+1;
                         end
-                        while (!temp[23])                      //normalize result
+                        for(i=0;i<200;i=i+1)                      //normalize result
                         begin
-                            temp=temp<<1;
-                            exptemp=exptemp-1;
+                            if(!temp[23])
+                            begin
+                                temp=temp<<1;
+                                exptemp=exptemp-1;
+                            end
                         end
                         result32[22:0]=temp[22:0];              //assign to result
                         result32[30:23]=exptemp;
@@ -115,10 +117,13 @@ begin
                     else if(signx==signy)
                     begin
                         temp=mantissax+mantissay;              //add mantissas
-                        while (temp[127:24]>0)                 //normalize result
+                        for(i=0;i<200;i=i+1)                 //normalize result
                         begin
-                            temp=temp>>1;
-                            exptemp=exptemp+1;
+                            if (temp[127:24]>0)
+                            begin
+                                temp=temp>>1;
+                                exptemp=exptemp+1;
+                            end
                         end 
                         temp=mantissax+mantissay;   
                         if (exptemp>254)                      //check for overflow
@@ -154,17 +159,23 @@ begin
                     overflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
-                    while (!temp3)                    //shifting temp to extract result
+                    for(i=0;i<200;i=i+1)                    //shifting temp to extract result
                     begin
-                        temp=temp<<1;
-                        temp3=temp[127];
+                        if(!temp3)  
+                        begin
+                            temp=temp<<1;
+                            temp3=temp[127];
+                        end
                     end
                     result32[22:0]=temp[126:104];
-                    temp2=mantissax*mantissay;           //figuring out how much mantissa affected exponent
-                    while (temp2>=2)
+                    temp=mantissax*mantissay;           //figuring out how much mantissa affected exponent
+                    for(i=0;i<200;i=i+1)
                     begin
-                        temp2=temp2/2;
-                        count=count+1;
+                        if (temp>=2)
+                        begin
+                            temp=temp>>1;
+                            count=count+1;
+                        end
                     end
                     count=count-46;                     //adjusting for decimal point
                     if ((count+exponentx+exponenty-127)>254 || (count+exponentx+exponenty-127)<1) //check for overflow again
@@ -254,10 +265,13 @@ begin
                             temp=temp^64'hffffffffffffffff;
                             temp=temp+1;
                         end
-                        while (!temp[52])                      //normalize result
+                        for(i=0;i<200;i=i+1)                      //normalize result
                         begin
-                            temp=temp<<1;
-                            exptemp=exptemp-1;
+                            if(!temp[52])  
+                            begin
+                                temp=temp<<1;
+                                exptemp=exptemp-1;
+                            end
                         end
                         result64[51:0]=temp[51:0];              //assign to result
                         result64[62:52]=exptemp;
@@ -265,10 +279,13 @@ begin
                     else if(signx==signy)
                     begin
                         temp=mantissax+mantissay;              //add mantissas
-                        while (temp[127:53]>0)                 //normalize result
+                        for(i=0;i<200;i=i+1)                   //normalize result
                         begin
-                            temp=temp>>1;
-                            exptemp=exptemp+1;
+                            if(temp[127:53]>0) 
+                            begin
+                                temp=temp>>1;
+                                exptemp=exptemp+1;
+                            end
                         end 
                         temp=mantissax+mantissay;   
                         if (exptemp>2046)                      //check for overflow
@@ -303,19 +320,24 @@ begin
                     overflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
-                    while (!temp3)                    //shifting temp to extract result
+                    for(i=0;i<200;i=i+1)                    //shifting temp to extract result
                     begin
-                        temp=temp<<1;
-                        temp3=temp[127];
+                        if(!temp3)   
+                        begin
+                            temp=temp<<1;
+                            temp3=temp[127];
+                        end
                     end  
                     result64[51:0]=temp[126:75];
                     temp=mantissax*mantissay;
-                    temp=temp>>104;
-                    temp2=temp;           //figuring out how much mantissa affected exponent
-                    while (temp2>=2)
+                    temp=temp>>104;           //figuring out how much mantissa affected exponent
+                    for(i=0;i<200;i=i+1)
                     begin
-                        temp2=temp2/2;
-                        count=count+1;
+                        if(temp>=2)
+                        begin
+                            temp=temp>>1;
+                            count=count+1;
+                        end
                     end
                     if ((count+exponentx+exponenty-1023)>2046 || (count+exponentx+exponenty-1023)<1) //check for overflow again
                     begin
