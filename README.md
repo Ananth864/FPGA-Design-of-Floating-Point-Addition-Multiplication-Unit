@@ -1,3 +1,2 @@
 # FPGA-Design-of-Floating-Point-Addition-Multiplication-Unit
-This project aims to implement floating point operations such as multiplication and addition using verilog. It takes in two 32/64 bit strings, the operation and the mode
-(double or single), performs operations on the inputs and outputs a 32/64 bit string. Synthesizable code and testbench is included in this repository along with its simulation.
+This project aims to implement floating point operations such as multiplication and addition using verilog. It takes in two 32/64 bit strings, the operation to be performed and the mode (double or single) and outputs a 32/64 bit string result. It is designed as a state machine that changes state every clock cycle depending on inputs. Synthesizable code and testbench are included in this repository along with its simulation. The verilog code can be simulated and synthesized on vivado.
