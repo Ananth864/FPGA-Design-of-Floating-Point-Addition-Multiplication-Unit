@@ -103,7 +103,7 @@ begin
                             temp=temp^32'hffffffff;
                             temp=temp+1;
                         end
-                        for(i=0;i<200;i=i+1)                      //normalize result
+                        for(i=0;i<25;i=i+1)                      //normalize result
                         begin
                             if(!temp[23])
                             begin
@@ -117,7 +117,7 @@ begin
                     else if(signx==signy)
                     begin
                         temp=mantissax+mantissay;              //add mantissas
-                        for(i=0;i<200;i=i+1)                 //normalize result
+                        for(i=0;i<100;i=i+1)                 //normalize result
                         begin
                             if (temp[127:24]>0)
                             begin
@@ -159,7 +159,7 @@ begin
                     overflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
-                    for(i=0;i<200;i=i+1)                    //shifting temp to extract result
+                    for(i=0;i<130;i=i+1)                    //shifting temp to extract result
                     begin
                         if(!temp3)  
                         begin
@@ -169,7 +169,7 @@ begin
                     end
                     result32[22:0]=temp[126:104];
                     temp=mantissax*mantissay;           //figuring out how much mantissa affected exponent
-                    for(i=0;i<200;i=i+1)
+                    for(i=0;i<100;i=i+1)
                     begin
                         if (temp>=2)
                         begin
@@ -265,7 +265,7 @@ begin
                             temp=temp^64'hffffffffffffffff;
                             temp=temp+1;
                         end
-                        for(i=0;i<200;i=i+1)                      //normalize result
+                        for(i=0;i<60;i=i+1)                      //normalize result
                         begin
                             if(!temp[52])  
                             begin
@@ -279,7 +279,7 @@ begin
                     else if(signx==signy)
                     begin
                         temp=mantissax+mantissay;              //add mantissas
-                        for(i=0;i<200;i=i+1)                   //normalize result
+                        for(i=0;i<100;i=i+1)                   //normalize result
                         begin
                             if(temp[127:53]>0) 
                             begin
@@ -320,7 +320,7 @@ begin
                     overflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
-                    for(i=0;i<200;i=i+1)                    //shifting temp to extract result
+                    for(i=0;i<150;i=i+1)                    //shifting temp to extract result
                     begin
                         if(!temp3)   
                         begin
