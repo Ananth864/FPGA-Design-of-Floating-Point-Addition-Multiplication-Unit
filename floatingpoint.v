@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module floatingpoint(x,y,clk,operation,mode,result32,result64,rst,overflow);
+module floatingpoint(x,y,clk,operation,mode,result32,result64,rst,overflow,underflow);
 input [63:0]x,y;
 reg [127:0] temp;
 integer temp3,i;
@@ -8,7 +8,7 @@ reg [63:0]count;
 input clk,rst,mode;
 output reg [31:0]result32;
 output reg[63:0]result64;
-output reg overflow;
+output reg overflow,underflow;
 input [1:0] operation; 
 reg [1:0] nextoperation;
 reg signx,signy;
@@ -149,14 +149,25 @@ begin
                     result32[31]=0;
                 else
                     result32[31]=1;
-                if ((exponentx+exponenty-127)>254 || (exponentx+exponenty-127)<1)         //checking for overflow
+                if ((exponentx+exponenty)>381 || (exponentx+exponenty)<128)         //checking for overflow
                 begin
-                    overflow=1;
-                    result32=0;
+                    if ((exponentx+exponenty)>381)
+                    begin
+                        overflow=1;
+                        underflow=0;
+                        result32=32'h7f7fffff;
+                    end
+                    else if ((exponentx+exponenty)<128)
+                    begin
+                        underflow=1;
+                        overflow=0;
+                        result32=32'h00800001;
+                    end
                 end    
                 else
                 begin
                     overflow=0;
+                    underflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
                     for(i=0;i<130;i=i+1)                    //shifting temp to extract result
@@ -178,14 +189,25 @@ begin
                         end
                     end
                     count=count-46;                     //adjusting for decimal point
-                    if ((count+exponentx+exponenty-127)>254 || (count+exponentx+exponenty-127)<1) //check for overflow again
+                    if ((count+exponentx+exponenty)>381 || (count+exponentx+exponenty)<128) //check for overflow again
                     begin
-                        overflow=1;
-                        result32=0;
+                        if((count+exponentx+exponenty)>381)
+                        begin
+                            overflow=1;
+                            underflow=0;
+                            result32=32'h7f7fffff;
+                        end
+                        else if((count+exponentx+exponenty)<128)
+                        begin
+                            underflow=1;
+                            overflow=0;
+                            result32=32'h00800001;
+                        end
                     end
                     else
                     begin
                         overflow=0;
+                        underflow=1;
                         result32[30:23]=(exponentx+exponenty+count-127); //add exponents
                     end
                 end
@@ -310,14 +332,25 @@ begin
                     result64[63]=0;
                 else
                     result64[63]=1;
-                if ((exponentx+exponenty-1023)>2046 || (exponentx+exponenty-1023)<1)         //checking for overflow
+                if ((exponentx+exponenty)>3069 || (exponentx+exponenty)<1024)         //checking for overflow
                 begin
-                    overflow=1;
-                    result64=0;
+                    if((exponentx+exponenty)>3069)
+                    begin
+                        overflow=1;
+                        result32=64'h7fefffffffffffff;
+                        underflow=0;
+                    end
+                    else if((exponentx+exponenty)<1024)
+                    begin
+                        underflow=1;
+                        overflow=0;
+                        result32=64'h0010000000000001;
+                    end
                 end
                 else
                 begin
                     overflow=0;
+                    underflow=0;
                     temp=mantissax*mantissay;
                     temp3=temp[127];
                     for(i=0;i<150;i=i+1)                    //shifting temp to extract result
@@ -339,14 +372,25 @@ begin
                             count=count+1;
                         end
                     end
-                    if ((count+exponentx+exponenty-1023)>2046 || (count+exponentx+exponenty-1023)<1) //check for overflow again
+                    if ((count+exponentx+exponenty)>3069 || (count+exponentx+exponenty)<1024) //check for overflow again
                     begin
-                        overflow=1;
-                        result64=0;
+                        if((count+exponentx+exponenty)>3069)
+                        begin
+                            overflow=1;
+                            underflow=0;
+                            result32=64'h7fefffffffffffff;
+                        end
+                        else if((count+exponentx+exponenty)<1024)
+                        begin
+                            underflow=1;
+                            overflow=0;
+                            result32=64'h0010000000000001;
+                        end
                     end  
                     else
                     begin
                         overflow=0;
+                        underflow=0;
                         result64[62:52]=(exponentx+exponenty+count-1023); //add exponents
                     end
                 end 
