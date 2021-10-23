@@ -1,402 +1,211 @@
 `timescale 1ns / 1ps
 
-module floatingpoint(x,y,clk,operation,mode,result32,result64,rst,overflow,underflow);
-input [63:0]x,y;
-reg [127:0] temp;
-integer temp3,i;
-reg [63:0]count;
-input clk,rst,mode;
-output reg [31:0]result32;
-output reg[63:0]result64;
-output reg overflow,underflow;
-input [1:0] operation; 
-reg [1:0] nextoperation;
-reg signx,signy;
-reg [63:0]exponentx,exponenty,exptemp,mantissax,mantissay;
-parameter idle=0,add=1,mul=2,single=0,double=1;
-
-always @(posedge clk)
-begin 
-    if (rst)
-    begin
-        nextoperation<=idle;                             //default state
-        result32<=0;
-        result64<=0;
-    end
-    else
-        nextoperation<=operation;                       //switching to new state
-end
-always @(nextoperation,x,y)
-begin
-    if (mode==single)                                    //32 bit operation
-    begin
-        signx=x[31];                                     //seperating input
-        signy=y[31];
-        mantissax=x[22:0];
-        mantissay=y[22:0];
-        exponentx=x[30:23];
-        exponenty=y[30:23];
-        
-        case (operation)                               
-        
-        add:begin
-                if (exponentx>exponenty)
-                begin                                  //check the difference in exponent
-                    temp3=exponentx-exponenty;
-                    exptemp=exponentx;                 //save final exponent in temporary
-                end
-                else
-                begin
-                    temp3=exponenty-exponentx;
-                    exptemp=exponenty;
-                end
-                if(signx==signy)                       //determine sign bit
-                    result32[31]=signx;
-                else
-                begin
-                    if (exponentx>exponenty)
-                        result32[31]=signx;
-                    else if (exponentx<exponenty)
-                        result32[31]=signy;
-                    else if (exponenty==exponentx)
-                    begin
-                        if(mantissax>mantissay)
-                            result32[31]=signx;
-                        else if (mantissax<mantissay)
-                            result32[31]=signy;
-                        else 
-                            result32[31]=0;
-                    end
-                end
-                if (temp3>23)                          //if size difference is too large, then assign one of the outputs
-                begin
-                    if(exponentx>exponenty)
-                        result32=x;
-                    else
-                        result32=y;
-                end
-                else
-                begin     
-                    mantissax[23]=1;                    //append one for calculation
-                    mantissay[23]=1;               
-                    if (exponentx>exponenty)              //shift mantissa so exponent is same
-                        mantissay=mantissay>>temp3;
-                    else
-                        mantissax=mantissax>>temp3;
-                        
-                    if (signx!=signy)
-                    begin
-                        overflow=0;
-                        if (signx==1)                           //convert to 2nd compliment if sign bit is 1
-                        begin
-                            mantissax=mantissax^32'hffffffff;
-                            mantissax=mantissax+1;
-                        end
-                        if (signy==1)
-                        begin
-                            mantissay=mantissay^32'hffffffff;
-                            mantissay=mantissay+1;
-                        end
-                        temp=mantissax+mantissay;              //add mantissas
-                        if (result32[31]==1)
-                        begin
-                            temp=temp^32'hffffffff;
-                            temp=temp+1;
-                        end
-                        for(i=0;i<25;i=i+1)                      //normalize result
-                        begin
-                            if(!temp[23])
-                            begin
-                                temp=temp<<1;
-                                exptemp=exptemp-1;
-                            end
-                        end
-                        result32[22:0]=temp[22:0];              //assign to result
-                        result32[30:23]=exptemp;
-                    end
-                    else if(signx==signy)
-                    begin
-                        temp=mantissax+mantissay;              //add mantissas
-                        for(i=0;i<100;i=i+1)                 //normalize result
-                        begin
-                            if (temp[127:24]>0)
-                            begin
-                                temp=temp>>1;
-                                exptemp=exptemp+1;
-                            end
-                        end 
-                        temp=mantissax+mantissay;   
-                        if (exptemp>254)                      //check for overflow
-                        begin
-                            result32=0;
-                            overflow=1;
-                        end
-                        else
-                        begin
-                            overflow=0;
-                            result32[22:0]=temp[22:0];        //assign result to output
-                            result32[30:23]=exptemp;
-                        end
-                    end
-                end        
-            end
-        
-        mul:begin
-                count=0;
-                mantissax[23]=1;                       //appending 1 to msb to compute product
-                mantissay[23]=1;
-                if (signx==signy)                      //determine sign bit
-                    result32[31]=0;
-                else
-                    result32[31]=1;
-                if ((exponentx+exponenty)>381 || (exponentx+exponenty)<128)         //checking for overflow
-                begin
-                    if ((exponentx+exponenty)>381)
-                    begin
-                        overflow=1;
-                        underflow=0;
-                        result32=32'h7f7fffff;
-                    end
-                    else if ((exponentx+exponenty)<128)
-                    begin
-                        underflow=1;
-                        overflow=0;
-                        result32=32'h00800001;
-                    end
-                end    
-                else
-                begin
-                    overflow=0;
-                    underflow=0;
-                    temp=mantissax*mantissay;
-                    temp3=temp[127];
-                    for(i=0;i<130;i=i+1)                    //shifting temp to extract result
-                    begin
-                        if(!temp3)  
-                        begin
-                            temp=temp<<1;
-                            temp3=temp[127];
-                        end
-                    end
-                    result32[22:0]=temp[126:104];
-                    temp=mantissax*mantissay;           //figuring out how much mantissa affected exponent
-                    for(i=0;i<100;i=i+1)
-                    begin
-                        if (temp>=2)
-                        begin
-                            temp=temp>>1;
-                            count=count+1;
-                        end
-                    end
-                    count=count-46;                     //adjusting for decimal point
-                    if ((count+exponentx+exponenty)>381 || (count+exponentx+exponenty)<128) //check for overflow again
-                    begin
-                        if((count+exponentx+exponenty)>381)
-                        begin
-                            overflow=1;
-                            underflow=0;
-                            result32=32'h7f7fffff;
-                        end
-                        else if((count+exponentx+exponenty)<128)
-                        begin
-                            underflow=1;
-                            overflow=0;
-                            result32=32'h00800001;
-                        end
-                    end
-                    else
-                    begin
-                        overflow=0;
-                        underflow=1;
-                        result32[30:23]=(exponentx+exponenty+count-127); //add exponents
-                    end
-                end
-            end
-        idle:result32=0;
-        endcase
-    end
-    else if (mode==double)                            //64 bit operation
-    begin
-        signx=x[63];                                     //seperating input
-        signy=y[63];
-        mantissax=x[51:0];
-        mantissay=y[51:0];
-        exponentx=x[62:52];
-        exponenty=y[62:52];
-        case (operation)
-        add:begin
-                if (exponentx>exponenty)
-                begin                                  //check the difference in exponent
-                    temp3=exponentx-exponenty;
-                    exptemp=exponentx;                 //save final exponent in temporary
-                end
-                else
-                begin
-                    temp3=exponenty-exponentx;
-                    exptemp=exponenty;
-                end
-                if(signx==signy)                       //determine sign bit
-                    result64[63]=signx;
-                else
-                begin
-                    if (exponentx>exponenty)
-                        result64[63]=signx;
-                    else if (exponentx<exponenty)
-                        result64[63]=signy;
-                    else if (exponenty==exponentx)
-                    begin
-                        if(mantissax>mantissay)
-                            result64[63]=signx;
-                        else if (mantissax<mantissay)
-                            result64[63]=signy;
-                        else 
-                            result64[63]=0;
-                     end
-                 end
-                 if (temp3>52)                          //if size difference is too large, then assign one of the outputs
-                 begin
-                    if(exponentx>exponenty)
-                        result64=x;
-                    else
-                        result64=y;
-                 end
-                 else
-                 begin     
-                    mantissax[52]=1;                    //append one for calculation
-                    mantissay[52]=1;               
-                    if (exponentx>exponenty)              //shift mantissa so exponent is same
-                        mantissay=mantissay>>temp3;
-                    else
-                        mantissax=mantissax>>temp3;
-                    if (signx!=signy)
-                    begin
-                        overflow=0;
-                        if (signx==1)                           //convert to 2nd compliment if sign bit is 1
-                        begin
-                            mantissax=mantissax^64'hffffffffffffffff;
-                            mantissax=mantissax+1;
-                        end
-                        if (signy==1)
-                        begin
-                            mantissay=mantissay^64'hffffffffffffffff;
-                            mantissay=mantissay+1;
-                        end
-                        temp=mantissax+mantissay;              //add mantissas
-                        if (result64[63]==1)
-                        begin
-                            temp=temp^64'hffffffffffffffff;
-                            temp=temp+1;
-                        end
-                        for(i=0;i<60;i=i+1)                      //normalize result
-                        begin
-                            if(!temp[52])  
-                            begin
-                                temp=temp<<1;
-                                exptemp=exptemp-1;
-                            end
-                        end
-                        result64[51:0]=temp[51:0];              //assign to result
-                        result64[62:52]=exptemp;
-                    end 
-                    else if(signx==signy)
-                    begin
-                        temp=mantissax+mantissay;              //add mantissas
-                        for(i=0;i<100;i=i+1)                   //normalize result
-                        begin
-                            if(temp[127:53]>0) 
-                            begin
-                                temp=temp>>1;
-                                exptemp=exptemp+1;
-                            end
-                        end 
-                        temp=mantissax+mantissay;   
-                        if (exptemp>2046)                      //check for overflow
-                        begin
-                            result64=0;
-                            overflow=1;
-                        end   
-                        else
-                        begin
-                            overflow=0;
-                            result64[51:0]=temp[51:0];        //assign result to output
-                            result64[62:52]=exptemp;
-                         end
-                     end
-                 end                     
-            end
-        mul:begin
-                count=0;
-                mantissax[52]=1;                       //appending 1 to msb to compute product
-                mantissay[52]=1;
-                if (signx==signy)                      //determine sign bit
-                    result64[63]=0;
-                else
-                    result64[63]=1;
-                if ((exponentx+exponenty)>3069 || (exponentx+exponenty)<1024)         //checking for overflow
-                begin
-                    if((exponentx+exponenty)>3069)
-                    begin
-                        overflow=1;
-                        result32=64'h7fefffffffffffff;
-                        underflow=0;
-                    end
-                    else if((exponentx+exponenty)<1024)
-                    begin
-                        underflow=1;
-                        overflow=0;
-                        result32=64'h0010000000000001;
-                    end
-                end
-                else
-                begin
-                    overflow=0;
-                    underflow=0;
-                    temp=mantissax*mantissay;
-                    temp3=temp[127];
-                    for(i=0;i<150;i=i+1)                    //shifting temp to extract result
-                    begin
-                        if(!temp3)   
-                        begin
-                            temp=temp<<1;
-                            temp3=temp[127];
-                        end
-                    end  
-                    result64[51:0]=temp[126:75];
-                    temp=mantissax*mantissay;
-                    temp=temp>>104;           //figuring out how much mantissa affected exponent
-                    for(i=0;i<200;i=i+1)
-                    begin
-                        if(temp>=2)
-                        begin
-                            temp=temp>>1;
-                            count=count+1;
-                        end
-                    end
-                    if ((count+exponentx+exponenty)>3069 || (count+exponentx+exponenty)<1024) //check for overflow again
-                    begin
-                        if((count+exponentx+exponenty)>3069)
-                        begin
-                            overflow=1;
-                            underflow=0;
-                            result32=64'h7fefffffffffffff;
-                        end
-                        else if((count+exponentx+exponenty)<1024)
-                        begin
-                            underflow=1;
-                            overflow=0;
-                            result32=64'h0010000000000001;
-                        end
-                    end  
-                    else
-                    begin
-                        overflow=0;
-                        underflow=0;
-                        result64[62:52]=(exponentx+exponenty+count-1023); //add exponents
-                    end
-                end 
-            end
-        idle:result64=0;
-        endcase
-    end
-end    
+module FP_MUL_UNIT(x,y,clk,result,underflow,overflow);
+input [31:0]x,y;
+output [31:0]result;
+input clk;
+output underflow,overflow;
+wire over,under;
+wire [31:0]res;
+wire [47:0]product;
+wire effect;
+wire [22:0]op;
+wire [7:0]opexp;
+ArrayMultiplier ar1 (product, {1'b1,x[22:0]}, {1'b1,y[22:0]});
+normalizer n1 (product[47:23],effect,op);
+ExponentAdder e1 (x[30:23],y[30:23],effect,opexp,over,under);
+Overflow_Underflow_unit ou1(op,opexp,(x[31]^y[31]),over,under,res);
+Outputter dut (res,over,under,clk,result,overflow,underflow);
 endmodule
+
+module Cell(Cout, Sout,xn, am, Sin, Cin);
+output Cout, Sout;
+input xn, am, Sin, Cin;
+  wire t;
+  and (t, xn, am);
+  xor (Sout, t, Sin, Cin);
+  xor (t1, Sin, Cin);
+  and (t2, t, t1);
+  and (t3, Cin, Sin);
+  or (Cout, t2, t3);
+endmodule
+
+module FACell(Cout, Sout, xn, am, Cin);
+output Cout, Sout;
+input xn, am, Cin;
+wire t1, t2, t3;
+xor (t1, am, xn);
+and (t2, t1, Cin);
+and (t3, am, xn);
+or (Cout, t2, t3);
+xor (Sout, t1, Cin);
+endmodule
+
+module ArrayMultiplier(product, a, x);
+  
+  parameter m = 24;
+  parameter n = 24;
+  output [m+n-1:0] product;
+  input [m-1:0] a;
+  input [n-1:0] x;
+  
+  wire c_partial[m*n:0] ;
+  wire s_partial[m*n:0] ;
+  
+  // first line of the multiplier
+  genvar i;
+  generate
+    for(i=0; i<m; i=i+1)
+    begin
+      Cell c_first(.Cout(c_partial[i]), .Sout(s_partial[i]),
+                   .xn(x[0]), .am(a[i]), .Sin(1'b0), .Cin(1'b0));
+    end
+  endgenerate
+  
+  
+  // middle lines of the multiplier - except last column
+  genvar j, k;
+  generate
+    for(k=0; k<n-1; k=k+1)
+    begin
+      for(j=0; j<m-1; j=j+1)
+      begin
+        Cell c_middle(c_partial[m*(k+1)+j], s_partial[m*(k+1)+j],
+                      x[k+1], a[j], s_partial[m*(k+1)+j-m+1], c_partial[m*(k+1)+j-m]);
+      end
+    end
+  endgenerate
+  
+  // middle lines of the multiplier - only last column
+  genvar z;
+  generate
+    for(z=0; z<n-1; z=z+1)
+    begin
+      Cell c_middle_last_col(c_partial[m*(z+1)+(m-1)], s_partial[m*(z+1)+(m-1)],
+                             x[z+1], a[+(m-1)], 1'b0, c_partial[m*(z+1)+(m-1)-m]);
+    end
+  endgenerate
+  
+  // last line of the multiplier
+  wire c_last_partial[m-1:0] ;
+  wire s_last_partial[m-2:0] ;
+  buf (c_last_partial[0], 1'b0);
+  
+  genvar l;
+  generate
+    for(l=0; l<m-1; l=l+1)
+    begin
+      FACell c_last(c_last_partial[l+1], s_last_partial[l],
+                    c_partial[(n-1)*m+l], s_partial[(n-1)*m+l+1], c_last_partial[l]);
+    end
+  endgenerate
+  
+  
+  // product bits from first and middle cells
+  generate
+    for(i=0; i<n; i=i+1)
+    begin
+      buf (product[i], s_partial[m*i]);
+    end
+  endgenerate
+  
+  // product bits from the last line of cells
+  generate
+    for(i=n; i<n+m-1; i=i+1)
+    begin
+      buf (product[i], s_last_partial[i-n]);
+    end
+  endgenerate
+    
+  // msb of product
+  buf (product[m+n-1], c_last_partial[m-2]);
+
+endmodule
+
+module normalizer(in,effect,op);
+input [24:0]in;
+output reg effect;
+reg [1:0]t2=2'b00;
+output reg[22:0]op;
+always @(in)
+begin
+    if((in[24]&in[23])|(in[24]&~in[23]))
+    begin
+        op<=in[23:1];
+        effect<=1'b1;
+    end
+    else 
+    begin
+        op<=in[22:0];
+        effect<=1'b0;
+    end        
+end
+endmodule
+
+module ExponentAdder(x,y,effect,op,overflow,underflow);
+input [7:0]x,y;
+input effect;
+output reg [7:0]op;
+output reg underflow,overflow;
+wire [10:0]t1,t2,t3,t4;
+wire cout;
+assign t1=x;
+assign t2=y;
+adder ad1 (t1, t2, 1'b0, t3, cout); 
+adder ad12 (t3,11'b11110000001,1'b0,t4,cout);
+initial begin
+overflow<=1'b0;
+underflow<=1'b0;
+end
+always @(effect,t4)
+begin
+    overflow<=0;
+    underflow<=0;
+    op<=t4[7:0]+effect;
+    if (t4[8]&&!t4[10])
+    begin
+        overflow<=1'b1;
+        op<=8'b11111111;
+    end
+    else if (t4[10])
+    begin
+        underflow<=1'b1;
+        op<=8'b00000000;
+    end
+end
+endmodule
+
+module Overflow_Underflow_unit(a,b,sign,overflow,underflow,result);
+input [22:0]a;
+input [7:0]b;
+input overflow,underflow,sign;
+output reg [31:0]result;
+
+always @(a,b,sign,underflow,overflow)
+begin
+    if(overflow)
+        result=32'hffffffff;
+    else if (underflow)
+        result=32'h00000000;
+    else
+    begin
+        result[31]=sign;
+        result[22:0]=a;
+        result[30:23]=b;
+    end
+end
+endmodule
+
+module Outputter(x,over,under,clk,y,overflow,underflow);
+input [31:0]x;
+input clk,over,under;
+output reg overflow,underflow;
+output reg[31:0]y;
+always @(posedge clk)
+begin
+    y<=x;
+    overflow<=over;
+    underflow<=under;
+end
+endmodule
+
